@@ -1,0 +1,49 @@
+name: Post Benchmark Comment
+
+on:
+  workflow_run:
+    workflows: ["Benchmark PR (fork-safe)"]
+    types: [completed]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  comment:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download benchmark artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: benchmark-comment-*
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          path: artifacts
+
+      - name: Post comments
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for dir in artifacts/benchmark-comment-*/; do
+            [ -d "$dir" ] || continue
+            pr=$(cat "$dir/pr_number.txt")
+            jv=$(cat "$dir/julia_version.txt")
+
+            # Find existing comment by this bot for this Julia version
+            comment_id=$(gh api \
+              "repos/${{ github.repository }}/issues/${pr}/comments" \
+              --paginate \
+              --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | contains(\"Benchmark Results (Julia v${jv})\"))) | .id" \
+              | head -1)
+
+            if [ -n "$comment_id" ]; then
+              gh api --method PATCH \
+                "repos/${{ github.repository }}/issues/comments/${comment_id}" \
+                -F body=@"$dir/body.md"
+            else
+              gh api --method POST \
+                "repos/${{ github.repository }}/issues/${pr}/comments" \
+                -F body=@"$dir/body.md"
+            fi
+          done

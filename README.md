@@ -26,6 +26,7 @@ https://github.com/MilesCranmer/AirspeedVelocity.jl/assets/7593028/f27b04ef-8491
   - [Using in CI](#using-in-ci)
     - [Option 1: PR Comments](#option-1-pr-comments)
     - [Option 2: Job Summary](#option-2-job-summary)
+    - [Option 3: PR Comments (fork-safe)](#option-3-pr-comments-fork-safe)
     - [Multiple Julia versions](#multiple-julia-versions)
     - [CI Parameters](#ci-parameters)
   - [Further examples](#further-examples)
@@ -109,6 +110,92 @@ jobs:
 
 Both workflows run AirspeedVelocity and display results with separate, collapsible tables for runtime and memory.
 
+### Option 3: PR Comments (fork-safe)
+
+When PRs come from forks, `pull_request` workflows run with read-only permissions
+and cannot post PR comments. Option 1 uses `pull_request_target` to work around this,
+but that runs the PR's code with elevated privileges — a security risk.
+
+This option uses a two-stage approach: the benchmark runs in a read-only `pull_request`
+workflow and uploads results as an artifact, then a separate privileged `workflow_run`
+workflow posts the comment.
+
+Add two workflow files to your package:
+
+**`.github/workflows/benchmark.yml`** — runs benchmarks (no write permissions needed):
+
+```yaml
+name: Benchmark this PR
+on:
+  pull_request:
+    branches: [ master ]  # change to your default branch
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: MilesCranmer/AirspeedVelocity.jl@action-v1
+        with:
+          julia-version: '1'
+          post-comment: 'false'
+```
+
+**`.github/workflows/post_benchmark_comment.yml`** — posts comments (privileged):
+
+```yaml
+name: Post Benchmark Comment
+on:
+  workflow_run:
+    workflows: ["Benchmark this PR"]
+    types: [completed]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  comment:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download benchmark artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: benchmark-comment-*
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          path: artifacts
+
+      - name: Post comments
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for dir in artifacts/benchmark-comment-*/; do
+            [ -d "$dir" ] || continue
+            pr=$(cat "$dir/pr_number.txt")
+            jv=$(cat "$dir/julia_version.txt")
+
+            comment_id=$(gh api \
+              "repos/${{ github.repository }}/issues/${pr}/comments" \
+              --paginate \
+              --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | contains(\"Benchmark Results (Julia v${jv})\"))) | .id" \
+              | head -1)
+
+            if [ -n "$comment_id" ]; then
+              gh api --method PATCH \
+                "repos/${{ github.repository }}/issues/comments/${comment_id}" \
+                -F body=@"$dir/body.md"
+            else
+              gh api --method POST \
+                "repos/${{ github.repository }}/issues/${pr}/comments" \
+                -F body=@"$dir/body.md"
+            fi
+          done
+```
+
+> **Note:** The `workflow_run` trigger requires the commenter workflow file to exist
+> on the default branch. You must merge the commenter workflow to your default branch
+> before the two-stage flow will work.
+
 ### Multiple Julia versions
 
 ```yaml
@@ -131,6 +218,7 @@ Each matrix leg writes its own comment (Option 1) or section in the job summary 
 | `asv-version`     | `"0.6"`          | AirspeedVelocity version to install         |
 | `julia-version`   | `"1"`            | Julia version to install                    |
 | `job-summary`     | `"false"`        | Output to job summary instead of PR comment |
+| `post-comment`    | `"true"`         | Post comment directly or upload as artifact |
 | `tune`            | `"false"`        | `--tune` to tune benchmarks first           |
 | `mode`            | `"time,memory"`  | Which tables to generate (`time`, `memory`) |
 | `enable-plots`    | `"false"`        | Upload PNG plots as artifact                |

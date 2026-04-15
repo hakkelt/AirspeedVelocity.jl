@@ -1,0 +1,25 @@
+name: Benchmark PR (fork-safe)
+
+on:
+  pull_request:
+    branches: [ master ]        # change if your default branch differs
+
+# No special permissions needed — the action uploads an artifact
+# instead of commenting directly. A separate workflow_run workflow
+# (post_benchmark_comment.yml) picks up the artifact and posts the comment.
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        julia-version: ["1", "1.10"]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Run AirspeedVelocity composite action (local path)
+        uses: ./                  # uses action.yml at the repo root
+        with:
+          julia-version: ${{ matrix.julia-version }}
+          post-comment: 'false'
