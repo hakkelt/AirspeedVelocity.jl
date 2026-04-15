@@ -1,8 +1,12 @@
-name: Benchmark a pull request
+name: Benchmark PR (fork-safe)
 
 on:
-  pull_request:          # keeps the write token for forked PRs
+  pull_request:
     branches: [ master ]        # change if your default branch differs
+
+# No special permissions needed — the action uploads an artifact
+# instead of commenting directly. A separate workflow_run workflow
+# (post_benchmark_comment.yml) picks up the artifact and posts the comment.
 
 jobs:
   bench:
@@ -18,4 +22,4 @@ jobs:
         uses: ./                  # uses action.yml at the repo root
         with:
           julia-version: ${{ matrix.julia-version }}
-          job-summary: 'true'
+          post-comment: 'false'
