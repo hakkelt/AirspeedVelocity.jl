@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.6](https://github.com/hakkelt/AirspeedVelocity.jl/compare/v0.6.5...v0.6.6) (2026-04-20)
+
+
+### Features
+
+* add post-comment input for optional fork-safe two-stage workflow ([6f7d23b](https://github.com/hakkelt/AirspeedVelocity.jl/commit/6f7d23b60ef542e2cbb75ddd932563c5e72e986f))
+
 ## [0.6.5](https://github.com/MilesCranmer/AirspeedVelocity.jl/compare/v0.6.4...v0.6.5) (2026-01-24)
 
 ### Features
