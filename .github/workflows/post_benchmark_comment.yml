@@ -1,0 +1,23 @@
+name: Post Benchmark Comment
+
+on:
+  workflow_run:
+    workflows: ["Benchmark PR (fork-safe)"]
+    types: [completed]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  comment:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_commit.id }}
+      - name: Post benchmark comments
+        uses: ./post-comment
+        with:
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
